@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5分からの習慣</title>
+  <style>
+    :root {
+      --bg: #fff8fb;
+      --pink: #ffd6e5;
+      --pink-d: #ff8fb7;
+      --mint: #cdf3e4;
+      --mint-d: #5cc9a0;
+      --lav: #e6dcff;
+      --yellow: #fff3c4;
+      --ink: #5a4a5e;
+      --sub: #a698a9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 32px 16px 56px; text-align: center; }
+    h1 { font-size: 26px; margin: 0 0 6px; }
+    .lead { margin: 0 0 22px; color: var(--sub); font-size: 14px; }
+    h2 { font-size: 17px; margin: 32px 0 12px; }
+
+    .card { background: #fff; border-radius: 20px; padding: 18px 16px; box-shadow: 0 4px 14px rgba(255, 143, 183, .15); }
+
+    button { font: inherit; border: 0; cursor: pointer; border-radius: 999px; padding: 8px 16px; color: var(--ink); transition: transform .1s; }
+    button:active { transform: scale(.95); }
+
+    /* 追加フォーム */
+    .add { display: flex; gap: 8px; justify-content: center; }
+    .add input {
+      flex: 1; min-width: 0; font: inherit; padding: 12px 16px; text-align: center;
+      border: 2px solid var(--pink); border-radius: 999px; outline: none; background: #fff; color: var(--ink);
+    }
+    .add input:focus { border-color: var(--pink-d); }
+    .btn-add { background: var(--pink-d); color: #fff; font-weight: bold; }
+
+    /* 習慣リスト */
+    #list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .empty { color: var(--sub); font-size: 14px; padding: 8px 0; }
+    .habit { display: flex; align-items: center; justify-content: center; gap: 12px; background: #fff; border-radius: 18px; padding: 12px 14px; box-shadow: 0 4px 14px rgba(255, 143, 183, .15); }
+    .habit.done { background: var(--mint); }
+    .habit .name { flex: 1; font-weight: bold; text-align: center; }
+    .habit .mark { font-size: 22px; }
+    .btn-do { background: var(--yellow); font-weight: bold; }
+    .habit.done .btn-do { background: #fff; color: var(--sub); }
+
+    /* タイマー */
+    #timer { background: var(--lav); margin-top: 22px; }
+    #timer select {
+      font: inherit; padding: 8px 12px; border-radius: 999px; border: 0; background: #fff; color: var(--ink); max-width: 100%;
+    }
+    .stepper { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 8px; }
+    .stepper button { background: #fff; font-size: 20px; width: 44px; height: 44px; padding: 0; font-weight: bold; }
+    .stepper input {
+      width: 90px; font: inherit; font-size: 24px; font-weight: bold; text-align: center;
+      padding: 6px; border: 0; border-radius: 14px; background: #fff; color: var(--ink);
+    }
+    .stepper span { font-size: 16px; }
+    .chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+    .chips button { background: #fff; font-size: 13px; padding: 6px 12px; }
+
+    #time { font-size: 64px; font-weight: bold; font-variant-numeric: tabular-nums; margin: 10px 0 6px; }
+    .bar { height: 10px; background: #fff; border-radius: 999px; overflow: hidden; margin: 0 8px 14px; }
+    .bar i { display: block; height: 100%; width: 0; background: var(--pink-d); border-radius: 999px; transition: width .25s linear; }
+    .btn-start { background: var(--pink-d); color: #fff; font-weight: bold; padding: 10px 28px; }
+    .btn-start:disabled { opacity: .5; }
+    .btn-stop { background: #fff; }
+    #msg { min-height: 24px; margin-top: 12px; color: var(--mint-d); font-weight: bold; }
+    .note { margin: 8px 0 0; font-size: 12px; color: var(--sub); }
+    #stopAlarm {
+      display: none; width: 100%; margin-top: 12px; padding: 18px; font-size: 20px; font-weight: bold;
+      background: var(--pink-d); color: #fff; animation: pulse 1s infinite;
+    }
+    #stopAlarm.show { display: block; }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+
+    /* カレンダー */
+    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .dow { text-align: center; font-size: 12px; color: var(--sub); }
+    .day {
+      aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border-radius: 14px; background: #f6f1f7; font-size: 14px; cursor: pointer; position: relative;
+    }
+    .day small { font-size: 10px; line-height: 1; height: 10px; }
+    .day.done { background: var(--mint); font-weight: bold; }
+    .day.today { outline: 3px solid var(--pink-d); }
+    .day.selected { background: var(--pink); }
+    .day.done.selected { background: var(--mint-d); color: #fff; }
+
+    /* 選んだ日の記録 */
+    #detail { background: var(--yellow); margin-top: 14px; }
+    #detail h3 { margin: 0 0 8px; font-size: 16px; }
+    #detailList { list-style: none; margin: 0; padding: 0; }
+    #detailList li { padding: 4px 0; }
+    #total { margin: 8px 0 0; font-size: 14px; color: var(--sub); }
+
+    .footer { margin-top: 28px; font-size: 12px; color: var(--sub); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌱 5分からの習慣</h1>
+    <p class="lead">まずは5分から。できた日は、ごほうびに色がつくよ。</p>
+
+    <div class="add">
+      <input id="name" placeholder="習慣の名前（例：読書）" maxlength="20">
+      <button id="add" class="btn-add">追加</button>
+    </div>
+    <div id="list"></div>
+
+    <div id="timer" class="card">
+      <select id="timerHabit"></select>
+
+      <div class="stepper">
+        <button id="minus">−</button>
+        <input id="minutes" type="number" inputmode="numeric" min="1" max="120" step="1" value="15">
+        <span>分</span>
+        <button id="plus">＋</button>
+      </div>
+      <div class="chips" id="chips">
+        <button data-m="5">5分</button>
+        <button data-m="15">15分</button>
+        <button data-m="30">30分</button>
+        <button data-m="60">60分</button>
+        <button data-m="120">120分</button>
+      </div>
+
+      <div id="time">15:00</div>
+      <div class="bar"><i id="bar"></i></div>
+      <button id="start" class="btn-start">スタート</button>
+      <button id="stop" class="btn-stop">やめる</button>
+      <button id="stopAlarm">⏰ アラームを止める</button>
+      <div id="msg"></div>
+      <p class="note">タイマー中は、このページを開いたまま画面を点けておいてね。念のため、スマホの時計アラームも一緒に使うと安心です。</p>
+    </div>
+
+    <h2>📅 今月の記録</h2>
+    <div class="card">
+      <div class="grid" id="dows"></div>
+      <div class="grid" id="cal" style="margin-top:6px"></div>
+    </div>
+
+    <div id="detail" class="card">
+      <h3 id="detailTitle"></h3>
+      <ul id="detailList"></ul>
+      <p id="total"></p>
+    </div>
+
+    <p class="footer">記録は、この端末のブラウザに保存されます。</p>
+  </div>
+
+  <script>
+    const nameInput = document.querySelector('#name');
+    const addBtn = document.querySelector('#add');
+    const list = document.querySelector('#list');
+    const timerHabit = document.querySelector('#timerHabit');
+    const minutesInput = document.querySelector('#minutes');
+    const timeEl = document.querySelector('#time');
+    const barEl = document.querySelector('#bar');
+    const startBtn = document.querySelector('#start');
+    const stopBtn = document.querySelector('#stop');
+    const stopAlarmBtn = document.querySelector('#stopAlarm');
+    const msgEl = document.querySelector('#msg');
+    const detailTitle = document.querySelector('#detailTitle');
+    const detailList = document.querySelector('#detailList');
+    const totalEl = document.querySelector('#total');
+
+    document.querySelector('#dows').innerHTML =
+      '日月火水木金土'.split('').map(d => `<div class="dow">${d}</div>`).join('');
+
+    function getToday() {
+      const d = new Date();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+    }
+    const today = getToday();
+    let selected = today;
+
+    let habits = JSON.parse(localStorage.getItem('habits') || '[]');
+    let logs = JSON.parse(localStorage.getItem('logs2') || '{}');
+
+    Object.keys(logs).forEach(date => {
+      logs[date] = logs[date].map(x => typeof x === 'string' ? { name: x, sec: null } : x);
+    });
+
+    function save() {
+      localStorage.setItem('habits', JSON.stringify(habits));
+      localStorage.setItem('logs2', JSON.stringify(logs));
+    }
+
+    function isDone(date, h) {
+      return (logs[date] || []).some(x => x.name === h);
+    }
+
+    function fmtSec(sec) {
+      if (sec < 60) return `${sec}秒`;
+      const m = Math.round(sec / 60);
+      if (m >= 60) {
+        const h = Math.floor(m / 60), r = m % 60;
+        return r ? `${h}時間${r}分` : `${h}時間`;
+      }
+      return `${m}分`;
+    }
+
+    function renderCal() {
+      const cal = document.querySelector('#cal');
+      cal.innerHTML = '';
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth();
+      const first = new Date(y, m, 1).getDay();
+      const last = new Date(y, m + 1, 0).getDate();
+      for (let i = 0; i < first; i++) cal.appendChild(document.createElement('div'));
+      for (let d = 1; d <= last; d++) {
+        const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const div = document.createElement('div');
+        div.className = 'day';
+        const count = (logs[key] || []).length;
+        div.innerHTML = `<span>${d}</span><small>${count > 0 ? '🌸'.repeat(Math.min(count, 3)) : ''}</small>`;
+        if (count > 0) div.classList.add('done');
+        if (key === today) div.classList.add('today');
+        if (key === selected) div.classList.add('selected');
+        div.addEventListener('click', () => { selected = key; render(); });
+        cal.appendChild(div);
+      }
+    }
+
+    function renderDetail() {
+      const [y, m, d] = selected.split('-');
+      detailTitle.textContent = `📝 ${Number(m)}月${Number(d)}日の記録`;
+      detailList.innerHTML = '';
+      const items = logs[selected] || [];
+
+      if (items.length === 0) {
+        detailList.innerHTML = '<li>まだ記録はありません</li>';
+        totalEl.textContent = '';
+        return;
+      }
+      let total = 0;
+      items.forEach(it => {
+        const li = document.createElement('li');
+        const dur = it.sec ? `（${fmtSec(it.sec)}）` : '';
+        li.textContent = `✅ ${it.name}${dur}`;
+        detailList.appendChild(li);
+        total += it.sec || 0;
+      });
+      totalEl.textContent = total > 0 ? `合計 ${fmtSec(total)}` : '';
+    }
+
+    function render() {
+      list.innerHTML = '';
+
+      if (habits.length === 0) {
+        list.innerHTML = '<div class="empty">まず、続けたい習慣を追加してね 🌱<br>（読書・散歩・勉強・日記…なんでもOK）</div>';
+      }
+
+      habits.forEach(h => {
+        const done = isDone(today, h);
+        const row = document.createElement('div');
+        row.className = 'habit' + (done ? ' done' : '');
+
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        mark.textContent = done ? '✅' : '⬜';
+
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = h;
+
+        const btn = document.createElement('button');
+        btn.className = 'btn-do';
+        btn.textContent = done ? '取り消す' : 'できた！';
+        btn.addEventListener('click', () => toggle(h));
+
+        row.append(mark, name, btn);
+        list.appendChild(row);
+      });
+
+      const sel = timerHabit.value;
+      timerHabit.innerHTML = '';
+      habits.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h;
+        opt.textContent = h;
+        timerHabit.appendChild(opt);
+      });
+      if (habits.includes(sel)) timerHabit.value = sel;
+
+      renderCal();
+      renderDetail();
+    }
+
+    function markDone(h, sec) {
+      logs[today] = logs[today] || [];
+      const found = logs[today].find(x => x.name === h);
+      if (found) {
+        found.sec = sec;
+      } else {
+        logs[today].push({ name: h, sec: sec });
+      }
+      save();
+      render();
+    }
+
+    function toggle(h) {
+      logs[today] = logs[today] || [];
+      if (isDone(today, h)) {
+        logs[today] = logs[today].filter(x => x.name !== h);
+      } else {
+        logs[today].push({ name: h, sec: null });
+      }
+      save();
+      render();
+    }
+
+    addBtn.addEventListener('click', () => {
+      const v = nameInput.value.trim();
+      if (!v) return;
+      if (habits.includes(v)) { nameInput.value = ''; return; } // 同じ名前は追加しない
+      habits.push(v);
+      nameInput.value = '';
+      save();
+      render();
+    });
+    nameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.isComposing) addBtn.click();
+    });
+
+    // ---------- タイマー ----------
+    let endTime = null;
+    let totalMs = 0;
+    let timerId = null;
+    let alarmId = null;
+    let audioCtx = null;
+    let wakeLock = null;
+    let currentHabit = null;
+    let currentSec = 0;
+
+    // 入力された分数（1〜120の整数）を秒にして返す
+    function getMinutes() {
+      let v = Math.round(Number(minutesInput.value));
+      if (!v || v < 1) v = 1;
+      return Math.min(120, v);
+    }
+    function getSec() { return getMinutes() * 60; }
+
+    function showTime(ms) {
+      const s = Math.max(0, Math.ceil(ms / 1000));
+      const hh = Math.floor(s / 3600);
+      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      timeEl.textContent = hh > 0 ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
+    }
+
+    // やわらかいチャイム（ド・ミ・ソ・高いド）
+    function chime() {
+      if (!audioCtx) return;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const t = audioCtx.currentTime + i * 0.28;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+        osc.start(t);
+        osc.stop(t + 1.7);
+      });
+    }
+
+    // 画面が消えないようにする
+    async function lockScreen() {
+      try {
+        if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+      } catch (e) {}
+    }
+    function unlockScreen() {
+      try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+    }
+
+    function resetTimer() {
+      clearInterval(timerId);
+      timerId = null;
+      endTime = null;
+      unlockScreen();
+      showTime(getSec() * 1000);
+      barEl.style.width = '0%';
+      startBtn.textContent = 'スタート';
+      startBtn.disabled = false;
+    }
+
+    // 時間切れ → 止めるまで鳴らし続ける
+    function finish() {
+      clearInterval(timerId);
+      timerId = null;
+      endTime = null;
+      selected = today;
+      markDone(currentHabit, currentSec);
+
+      showTime(0);
+      barEl.style.width = '100%';
+      startBtn.disabled = true;
+      msgEl.textContent = `⏰ 時間です！${currentHabit} おつかれさま`;
+      stopAlarmBtn.classList.add('show');
+
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      chime();
+      alarmId = setInterval(chime, 3500);
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+    }
+
+    stopAlarmBtn.addEventListener('click', () => {
+      clearInterval(alarmId);
+      alarmId = null;
+      stopAlarmBtn.classList.remove('show');
+      unlockScreen();
+      msgEl.textContent = `🎉 ${currentHabit} 記録したよ！`;
+      resetTimer();
+    });
+
+    function tick() {
+      if (!endTime) return;
+      const left = endTime - Date.now();
+      showTime(left);
+      barEl.style.width = Math.min(100, (1 - left / totalMs) * 100) + '%';
+      if (left <= 0) finish();
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (timerId || alarmId) return;
+      if (habits.length === 0) { msgEl.textContent = '先に習慣を追加してね'; return; }
+
+      audioCtx = audioCtx || new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      currentHabit = timerHabit.value;
+      currentSec = getSec();
+      totalMs = currentSec * 1000;
+      endTime = Date.now() + totalMs;
+      startBtn.textContent = '実行中...';
+      msgEl.textContent = '画面を点けたままにしてね';
+      lockScreen();
+
+      timerId = setInterval(tick, 250);
+    });
+
+    stopBtn.addEventListener('click', () => {
+      if (alarmId) return;
+      resetTimer();
+      msgEl.textContent = '';
+    });
+
+    // 画面を離れて戻ったとき、すぐに時間切れを確認する
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && timerId) {
+        lockScreen();
+        tick();
+      }
+    });
+
+    // ---------- 時間の入力 ----------
+    function setMinutes(v) {
+      if (timerId || alarmId) return;
+      minutesInput.value = Math.min(120, Math.max(1, Math.round(Number(v) || 1)));
+      resetTimer();
+    }
+    document.querySelector('#minus').addEventListener('click', () => setMinutes(getMinutes() - 1));
+    document.querySelector('#plus').addEventListener('click', () => setMinutes(getMinutes() + 1));
+    document.querySelector('#chips').addEventListener('click', e => {
+      const b = e.target.closest('button[data-m]');
+      if (b) setMinutes(b.dataset.m);
+    });
+    minutesInput.addEventListener('input', () => {
+      if (!timerId && !alarmId) showTime(getSec() * 1000);
+    });
+    minutesInput.addEventListener('change', () => setMinutes(minutesInput.value));
+
+    render();
+    resetTimer();
+  </script>
+</body>
+</html>
