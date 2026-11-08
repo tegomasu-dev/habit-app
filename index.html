@@ -37,7 +37,7 @@
     /* 追加フォーム */
     .add { display: flex; gap: 8px; justify-content: center; }
     .add input {
-      flex: 1; min-width: 0; font: inherit; padding: 12px 16px; text-align: center;
+      flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 12px 16px; text-align: center;
       border: 2px solid var(--pink); border-radius: 999px; outline: none; background: #fff; color: var(--ink);
     }
     .add input:focus { border-color: var(--pink-d); }
@@ -56,7 +56,7 @@
     /* タイマー */
     #timer { background: var(--lav); margin-top: 22px; }
     #timer select {
-      font: inherit; padding: 8px 12px; border-radius: 999px; border: 0; background: #fff; color: var(--ink); max-width: 100%;
+      font: inherit; font-size: 16px; padding: 8px 12px; border-radius: 999px; border: 0; background: #fff; color: var(--ink); max-width: 100%;
     }
     .stepper { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 8px; }
     .stepper button { background: #fff; font-size: 20px; width: 44px; height: 44px; padding: 0; font-weight: bold; }
@@ -74,6 +74,7 @@
     .btn-start { background: var(--pink-d); color: #fff; font-weight: bold; padding: 10px 28px; }
     .btn-start:disabled { opacity: .5; }
     .btn-stop { background: #fff; }
+    .btn-test { background: transparent; color: var(--sub); border: 1px dashed var(--sub); font-size: 13px; margin-top: 12px; }
     #msg { min-height: 24px; margin-top: 12px; color: var(--mint-d); font-weight: bold; }
     .note { margin: 8px 0 0; font-size: 12px; color: var(--sub); }
     #stopAlarm {
@@ -139,6 +140,7 @@
       <button id="start" class="btn-start">スタート</button>
       <button id="stop" class="btn-stop">やめる</button>
       <button id="stopAlarm">⏰ アラームを止める</button>
+      <div><button id="testSound" class="btn-test">🔊 音を確認</button></div>
       <div id="msg"></div>
       <p class="note">タイマー中は、このページを開いたまま画面を点けておいてね。念のため、スマホの時計アラームも一緒に使うと安心です。</p>
     </div>
@@ -169,6 +171,7 @@
     const startBtn = document.querySelector('#start');
     const stopBtn = document.querySelector('#stop');
     const stopAlarmBtn = document.querySelector('#stopAlarm');
+    const testSoundBtn = document.querySelector('#testSound');
     const msgEl = document.querySelector('#msg');
     const detailTitle = document.querySelector('#detailTitle');
     const detailList = document.querySelector('#detailList');
@@ -325,7 +328,7 @@
     addBtn.addEventListener('click', () => {
       const v = nameInput.value.trim();
       if (!v) return;
-      if (habits.includes(v)) { nameInput.value = ''; return; } // 同じ名前は追加しない
+      if (habits.includes(v)) { nameInput.value = ''; return; }
       habits.push(v);
       nameInput.value = '';
       save();
@@ -335,17 +338,100 @@
       if (e.key === 'Enter' && !e.isComposing) addBtn.click();
     });
 
+    // ---------- 音（audioタグ方式：マナーモードでも鳴りやすい） ----------
+    // 音声データ(WAV)を、コードで作る
+    function makeWavUrl(samples, rate) {
+      const buf = new ArrayBuffer(44 + samples.length * 2);
+      const v = new DataView(buf);
+      const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true);
+      w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+      v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+      w(36, 'data'); v.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        v.setInt16(44 + i * 2, s * 32767, true);
+      }
+      return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    }
+
+    const RATE = 22050;
+
+    // やわらかいチャイム（ド・ミ・ソ・高いド）＋ 少し間をあけて繰り返せる長さ
+    function makeChimeUrl() {
+      const dur = 4.5;
+      const data = new Float32Array(Math.floor(RATE * dur));
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((f, idx) => {
+        const start = idx * 0.28;
+        const len = 1.8;
+        for (let i = 0; i < RATE * len; i++) {
+          const t = i / RATE;
+          const env = Math.min(1, t / 0.05) * Math.exp(-t * 3);
+          const s = (Math.sin(2 * Math.PI * f * t) * 0.8 + Math.sin(2 * Math.PI * f * 2 * t) * 0.2) * env * 0.3;
+          const pos = Math.floor((start + t) * RATE);
+          if (pos < data.length) data[pos] += s;
+        }
+      });
+      return makeWavUrl(data, RATE);
+    }
+    function makeSilentUrl() {
+      return makeWavUrl(new Float32Array(Math.floor(RATE * 0.2)), RATE);
+    }
+
+    const chimeUrl = makeChimeUrl();
+    const silentUrl = makeSilentUrl();
+    const alarmAudio = new Audio();
+    alarmAudio.setAttribute('playsinline', '');
+    alarmAudio.preload = 'auto';
+
+    // iPhoneでマナーモードでも鳴らす設定（対応していない端末では何もしない）
+    function setPlaybackMode() {
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    }
+
+    // ボタンを押したタイミングで、音を鳴らせる状態にしておく
+    function unlockAudio() {
+      setPlaybackMode();
+      alarmAudio.loop = false;
+      alarmAudio.src = silentUrl;
+      alarmAudio.play().catch(() => {});
+    }
+
+    function playChime(loop) {
+      setPlaybackMode();
+      alarmAudio.pause();
+      alarmAudio.loop = loop;
+      alarmAudio.src = chimeUrl;
+      alarmAudio.currentTime = 0;
+      return alarmAudio.play();
+    }
+
+    function stopChime() {
+      alarmAudio.pause();
+      alarmAudio.loop = false;
+      try { alarmAudio.currentTime = 0; } catch (e) {}
+    }
+
+    testSoundBtn.addEventListener('click', () => {
+      if (alarmId) return;
+      msgEl.textContent = '🔊 音を鳴らしています…';
+      playChime(false)
+        .then(() => { setTimeout(() => { if (!alarmId && !timerId) msgEl.textContent = ''; }, 4500); })
+        .catch(() => { msgEl.textContent = '音を鳴らせませんでした。マナーモードと音量を確認してね'; });
+    });
+
     // ---------- タイマー ----------
     let endTime = null;
     let totalMs = 0;
     let timerId = null;
-    let alarmId = null;
-    let audioCtx = null;
+    let alarmId = null; // 鳴っている間は true
     let wakeLock = null;
     let currentHabit = null;
     let currentSec = 0;
 
-    // 入力された分数（1〜120の整数）を秒にして返す
     function getMinutes() {
       let v = Math.round(Number(minutesInput.value));
       if (!v || v < 1) v = 1;
@@ -361,27 +447,6 @@
       timeEl.textContent = hh > 0 ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
     }
 
-    // やわらかいチャイム（ド・ミ・ソ・高いド）
-    function chime() {
-      if (!audioCtx) return;
-      const notes = [523.25, 659.25, 783.99, 1046.5];
-      notes.forEach((freq, i) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        const t = audioCtx.currentTime + i * 0.28;
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
-        osc.start(t);
-        osc.stop(t + 1.7);
-      });
-    }
-
-    // 画面が消えないようにする
     async function lockScreen() {
       try {
         if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
@@ -415,15 +480,16 @@
       startBtn.disabled = true;
       msgEl.textContent = `⏰ 時間です！${currentHabit} おつかれさま`;
       stopAlarmBtn.classList.add('show');
+      alarmId = true;
 
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      chime();
-      alarmId = setInterval(chime, 3500);
+      playChime(true).catch(() => {
+        msgEl.textContent = '⏰ 時間です！（音が出せませんでした。画面のボタンで止めてね）';
+      });
       if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
     }
 
     stopAlarmBtn.addEventListener('click', () => {
-      clearInterval(alarmId);
+      stopChime();
       alarmId = null;
       stopAlarmBtn.classList.remove('show');
       unlockScreen();
@@ -443,8 +509,7 @@
       if (timerId || alarmId) return;
       if (habits.length === 0) { msgEl.textContent = '先に習慣を追加してね'; return; }
 
-      audioCtx = audioCtx || new AudioContext();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      unlockAudio(); // ← ボタンを押した瞬間に、音の準備をする
 
       currentHabit = timerHabit.value;
       currentSec = getSec();
@@ -463,7 +528,6 @@
       msgEl.textContent = '';
     });
 
-    // 画面を離れて戻ったとき、すぐに時間切れを確認する
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && timerId) {
         lockScreen();
