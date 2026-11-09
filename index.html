@@ -34,6 +34,13 @@
     button { font: inherit; border: 0; cursor: pointer; border-radius: 999px; padding: 8px 16px; color: var(--ink); transition: transform .1s; }
     button:active { transform: scale(.95); }
 
+    /* アプリ内ブラウザの案内 */
+    #inapp { display: none; background: var(--yellow); border: 2px solid var(--pink-d); border-radius: 18px; padding: 14px; margin-bottom: 18px; text-align: left; font-size: 14px; }
+    #inapp.show { display: block; }
+    #inapp b { display: block; margin-bottom: 6px; font-size: 15px; }
+    #inapp ol { margin: 6px 0 10px; padding-left: 20px; }
+    #inapp button { background: var(--pink-d); color: #fff; font-weight: bold; font-size: 13px; }
+
     /* 追加フォーム */
     .add { display: flex; gap: 8px; justify-content: center; }
     .add input {
@@ -109,6 +116,17 @@
 </head>
 <body>
   <div class="wrap">
+    <!-- LINEなどのアプリ内ブラウザで開いたときだけ出る案内 -->
+    <div id="inapp">
+      <b>⚠️ アプリの中のブラウザで開いています</b>
+      このままだと、記録がSafariと別々になって、消えたように見えます。
+      <ol>
+        <li>画面の右下の <b style="display:inline">共有マーク（□↑）</b> か <b style="display:inline">⋯</b> を押す</li>
+        <li>「<b style="display:inline">Safariで開く</b>」を押す</li>
+      </ol>
+      <button id="copyUrl">URLをコピーする</button>
+    </div>
+
     <h1>🌱 5分からの習慣</h1>
     <p class="lead">まずは5分から。できた日は、ごほうびに色がつくよ。</p>
 
@@ -142,7 +160,7 @@
       <button id="stopAlarm">⏰ アラームを止める</button>
       <div><button id="testSound" class="btn-test">🔊 音を確認</button></div>
       <div id="msg"></div>
-      <p class="note">タイマー中は、このページを開いたまま画面を点けておいてね。念のため、スマホの時計アラームも一緒に使うと安心です。</p>
+      <p class="note">タイマー中は、他のアプリを見ていても鳴るようにしています（無音の音声を流しています）。ただし、iPhoneの状況によっては止まることがあるので、念のため、スマホの時計アラームも一緒に使うと安心です。</p>
     </div>
 
     <h2>📅 今月の記録</h2>
@@ -157,7 +175,7 @@
       <p id="total"></p>
     </div>
 
-    <p class="footer">記録は、この端末のブラウザに保存されます。</p>
+    <p class="footer">記録は、この端末のブラウザに保存されます。<br>毎回、同じURLを、同じブラウザ（Safariなど）で開いてね。</p>
   </div>
 
   <script>
@@ -179,6 +197,20 @@
 
     document.querySelector('#dows').innerHTML =
       '日月火水木金土'.split('').map(d => `<div class="dow">${d}</div>`).join('');
+
+    // ---------- アプリ内ブラウザの案内 ----------
+    const inAppBrowser = /Line\/|Instagram|FBAN|FBAV|Twitter|MicroMessenger/i.test(navigator.userAgent);
+    if (inAppBrowser) document.querySelector('#inapp').classList.add('show');
+
+    document.querySelector('#copyUrl').addEventListener('click', async (e) => {
+      const url = location.origin + location.pathname;
+      try {
+        await navigator.clipboard.writeText(url);
+        e.target.textContent = 'コピーしました！Safariに貼って開いてね';
+      } catch (err) {
+        e.target.textContent = url; // コピーできないときは、URLを表示する
+      }
+    });
 
     function getToday() {
       const d = new Date();
@@ -339,7 +371,6 @@
     });
 
     // ---------- 音（audioタグ方式：マナーモードでも鳴りやすい） ----------
-    // 音声データ(WAV)を、コードで作る
     function makeWavUrl(samples, rate) {
       const buf = new ArrayBuffer(44 + samples.length * 2);
       const v = new DataView(buf);
@@ -360,9 +391,8 @@
     const RATE = 44100;
 
     // やわらかいチャイム（ド・ミ・ソ・高いド）
-    // 音量は小さめ(ピーク約0.16)にして、スマホのスピーカーで割れないようにしている
     function makeChimeUrl() {
-      const dur = 5.0; // くり返したとき、少し間があくように長めにする
+      const dur = 5.0;
       const data = new Float32Array(Math.floor(RATE * dur));
       const notes = [523.25, 659.25, 783.99, 1046.5];
       const len = 2.2;
@@ -371,9 +401,9 @@
         const n = Math.floor(RATE * len);
         for (let i = 0; i < n; i++) {
           const t = i / RATE;
-          const attack = Math.min(1, t / 0.08);          // ふわっと始まる
-          const decay = Math.exp(-t * 2.6);              // ゆっくり消える
-          const tail = Math.min(1, (len - t) / 0.3);     // 最後はなめらかに0へ
+          const attack = Math.min(1, t / 0.08);
+          const decay = Math.exp(-t * 2.6);
+          const tail = Math.min(1, (len - t) / 0.3);
           const env = attack * decay * tail;
           const s = (Math.sin(2 * Math.PI * f * t) + 0.12 * Math.sin(2 * Math.PI * 2 * f * t)) * env * 0.12;
           if (start + i < data.length) data[start + i] += s;
@@ -381,36 +411,47 @@
       });
       return makeWavUrl(data, RATE);
     }
-    function makeSilentUrl() {
-      return makeWavUrl(new Float32Array(Math.floor(RATE * 0.2)), RATE);
+    // 無音（タイマー中に流しっぱなしにして、Safariが止められにくくする）
+    function makeSilentUrl(sec) {
+      return makeWavUrl(new Float32Array(Math.floor(RATE * sec)), RATE);
     }
 
     const chimeUrl = makeChimeUrl();
-    const silentUrl = makeSilentUrl();
+    const silentUrl = makeSilentUrl(1);
     const alarmAudio = new Audio();
     alarmAudio.setAttribute('playsinline', '');
     alarmAudio.preload = 'auto';
     alarmAudio.volume = 1;
 
-    // iPhoneでマナーモードでも鳴らす設定（対応していない端末では何もしない）
     function setPlaybackMode() {
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
     }
 
-    // ボタンを押したタイミングで、音を鳴らせる状態にしておく
-    function unlockAudio() {
+    // コントロールセンターに出る表示
+    function setMediaInfo(title) {
+      try {
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({ title: title, artist: '5分からの習慣' });
+        }
+      } catch (e) {}
+    }
+
+    // タイマー開始：無音をくり返し流す（ボタンを押した瞬間に呼ぶ）
+    function startKeepAlive() {
       setPlaybackMode();
-      alarmAudio.loop = false;
+      setMediaInfo('タイマー中');
       alarmAudio.src = silentUrl;
+      alarmAudio.loop = true;
       alarmAudio.play().catch(() => {});
     }
 
+    // チャイムを鳴らす（loop=true なら、止めるまで鳴らし続ける）
     function playChime(loop) {
       setPlaybackMode();
-      alarmAudio.pause();
+      setMediaInfo('⏰ 時間です');
       alarmAudio.loop = loop;
       alarmAudio.src = chimeUrl;
-      alarmAudio.currentTime = 0;
+      try { alarmAudio.currentTime = 0; } catch (e) {}
       return alarmAudio.play();
     }
 
@@ -421,7 +462,7 @@
     }
 
     testSoundBtn.addEventListener('click', () => {
-      if (alarmId) return;
+      if (alarmId || timerId) { msgEl.textContent = 'タイマー中は、音の確認はできません'; return; }
       msgEl.textContent = '🔊 音を鳴らしています…';
       playChime(false)
         .then(() => { setTimeout(() => { if (!alarmId && !timerId) msgEl.textContent = ''; }, 5000); })
@@ -466,6 +507,7 @@
       timerId = null;
       endTime = null;
       unlockScreen();
+      if (!alarmId) stopChime(); // 無音も止める
       showTime(getSec() * 1000);
       barEl.style.width = '0%';
       startBtn.textContent = 'スタート';
@@ -514,14 +556,14 @@
       if (timerId || alarmId) return;
       if (habits.length === 0) { msgEl.textContent = '先に習慣を追加してね'; return; }
 
-      unlockAudio(); // ← ボタンを押した瞬間に、音の準備をする
+      startKeepAlive(); // ← ボタンを押した瞬間に、無音を流し始める
 
       currentHabit = timerHabit.value;
       currentSec = getSec();
       totalMs = currentSec * 1000;
       endTime = Date.now() + totalMs;
       startBtn.textContent = '実行中...';
-      msgEl.textContent = '画面を点けたままにしてね';
+      msgEl.textContent = '他のアプリを見ていても大丈夫（念のため時計アラームも）';
       lockScreen();
 
       timerId = setInterval(tick, 250);
@@ -533,6 +575,7 @@
       msgEl.textContent = '';
     });
 
+    // 画面に戻ってきたとき、すぐに時間切れを確認する
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && timerId) {
         lockScreen();
