@@ -357,22 +357,26 @@
       return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
     }
 
-    const RATE = 22050;
+    const RATE = 44100;
 
-    // やわらかいチャイム（ド・ミ・ソ・高いド）＋ 少し間をあけて繰り返せる長さ
+    // やわらかいチャイム（ド・ミ・ソ・高いド）
+    // 音量は小さめ(ピーク約0.16)にして、スマホのスピーカーで割れないようにしている
     function makeChimeUrl() {
-      const dur = 4.5;
+      const dur = 5.0; // くり返したとき、少し間があくように長めにする
       const data = new Float32Array(Math.floor(RATE * dur));
       const notes = [523.25, 659.25, 783.99, 1046.5];
+      const len = 2.2;
       notes.forEach((f, idx) => {
-        const start = idx * 0.28;
-        const len = 1.8;
-        for (let i = 0; i < RATE * len; i++) {
+        const start = Math.floor(idx * 0.30 * RATE);
+        const n = Math.floor(RATE * len);
+        for (let i = 0; i < n; i++) {
           const t = i / RATE;
-          const env = Math.min(1, t / 0.05) * Math.exp(-t * 3);
-          const s = (Math.sin(2 * Math.PI * f * t) * 0.8 + Math.sin(2 * Math.PI * f * 2 * t) * 0.2) * env * 0.3;
-          const pos = Math.floor((start + t) * RATE);
-          if (pos < data.length) data[pos] += s;
+          const attack = Math.min(1, t / 0.08);          // ふわっと始まる
+          const decay = Math.exp(-t * 2.6);              // ゆっくり消える
+          const tail = Math.min(1, (len - t) / 0.3);     // 最後はなめらかに0へ
+          const env = attack * decay * tail;
+          const s = (Math.sin(2 * Math.PI * f * t) + 0.12 * Math.sin(2 * Math.PI * 2 * f * t)) * env * 0.12;
+          if (start + i < data.length) data[start + i] += s;
         }
       });
       return makeWavUrl(data, RATE);
@@ -386,6 +390,7 @@
     const alarmAudio = new Audio();
     alarmAudio.setAttribute('playsinline', '');
     alarmAudio.preload = 'auto';
+    alarmAudio.volume = 1;
 
     // iPhoneでマナーモードでも鳴らす設定（対応していない端末では何もしない）
     function setPlaybackMode() {
@@ -419,7 +424,7 @@
       if (alarmId) return;
       msgEl.textContent = '🔊 音を鳴らしています…';
       playChime(false)
-        .then(() => { setTimeout(() => { if (!alarmId && !timerId) msgEl.textContent = ''; }, 4500); })
+        .then(() => { setTimeout(() => { if (!alarmId && !timerId) msgEl.textContent = ''; }, 5000); })
         .catch(() => { msgEl.textContent = '音を鳴らせませんでした。マナーモードと音量を確認してね'; });
     });
 
